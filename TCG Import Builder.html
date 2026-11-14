@@ -84,7 +84,7 @@ td .cardlink{cursor:pointer}
   <label class="muted">Default price
     <select id="priceMode">
       <option value="market">TCG Market Price</option>
-      <option value="low">TCG Low Price</option>
+      <option value="low" selected>TCG Low Price</option>
       <option value="blank">Blank (type it)</option>
     </select></label>
   <label class="muted">× <input id="pricePct" type="number" value="100" min="1" max="500" style="width:60px">%</label>
@@ -145,7 +145,7 @@ td .cardlink{cursor:pointer}
     <input id="listFile" type="file" accept=".csv,text/csv" multiple hidden>
     <div class="listwrap">
       <table>
-        <thead><tr><th>Card</th><th>Condition</th><th>Qty</th><th>Price</th><th class="n">Mkt</th><th></th></tr></thead>
+        <thead><tr><th>Card</th><th>Condition</th><th>Qty</th><th>Price</th><th class="n" id="refHead" title="Follows the Default price setting (Near Mint price for played cards)">Low</th><th></th></tr></thead>
         <tbody id="list"></tbody>
       </table>
     </div>
@@ -373,14 +373,14 @@ function render(){
   if (!skus.size){ el.innerHTML=''; return; }
   el.innerHTML = results.map((p,i)=>{
     const d = defaultSku(p);
-    const mk = money(d[col.market]);
+    const mk = refPrice(d);  // follows the Default price setting (Low or Market)
     const chosen = (p._chosen && p.skus.find(r=>r[col.id]===p._chosen)) || d;
     const conds = i===sel ? `<div class="addrow">
       <input class="qtyIn" type="number" min="1" value="${parseQuery($('q').value).qty}" title="Quantity">
       <button class="addBtn primary">Add</button>
       <select class="condSel" title="Condition">${p.skus.map(r=>`<option value="${esc(r[col.id])}"${r===chosen?' selected':''}>${esc(r[col.cond])}${r===d?' (default)':''}</option>`).join('')}</select>
     </div>` : '';
-    return `<div class="r ${i===sel?'sel':''}" data-i="${i}"><div class="nm">${setMark(p)}${esc(p.name)} ${mk!=null?`<span class="muted">· ${fmt(mk)}</span>`:''}</div><div class="meta">${esc(p.set)}${p.num?' · #'+esc(p.num):''}${p.rarity?' · '+esc(p.rarity):''} · ${esc(p.line)}</div>${conds}</div>`;
+    return `<div class="r ${i===sel?'sel':''}" data-i="${i}"><div class="nm">${setMark(p)}${esc(p.name)} ${mk!=null?`<span class="muted">· ${refLabel()} ${fmt(mk)}</span>`:''}</div><div class="meta">${esc(p.set)}${p.num?' · #'+esc(p.num):''}${p.rarity?' · '+esc(p.rarity):''} · ${esc(p.line)}</div>${conds}</div>`;
   }).join('') || `<div class="r muted">No match. Try fewer words, or check the game/set filter.</div>`;
   const s = el.querySelector('.r.sel'); if (s) s.scrollIntoView({block:'nearest'});
   showPreview(results[sel]);
@@ -529,6 +529,10 @@ function nmSibling(r){
   const p = byKey.get([r[col.line],r[col.set],r[col.name],r[col.num]].join('|'));
   return p ? p.skus.find(x=>norm(x[col.cond])===want) || null : null;
 }
+// reference price shown in results and the list: whichever price the Default price setting uses
+// (Low when it's set to Blank), falling back to the other one if missing
+function refPrice(r){ const m=$('priceMode').value==='market'; return m ? (money(r[col.market]) ?? money(r[col.low])) : (money(r[col.low]) ?? money(r[col.market])); }
+const refLabel = () => $('priceMode').value==='market' ? 'Market' : 'Low';
 function defaultPrice(r){
   const mode = $('priceMode').value;
   if (mode==='blank') return '';
@@ -560,9 +564,10 @@ function renderList(){
       <td style="font-size:12px">${esc(r[col.cond])}</td>
       <td><input type="number" min="1" value="${x.qty}" data-qty="${i}" style="width:54px"></td>
       <td><input type="number" min="0.01" step="0.01" value="${esc(x.price)}" data-price="${i}"></td>
-      <td class="n muted">${fmt(money(r[col.market]))}</td>
+      <td class="n muted">${fmt(refPrice(r) ?? refPrice(nmSibling(r)||{}))}</td>
       <td><button data-del="${i}" title="Remove">✕</button></td></tr>`;
   }).join('');
+  $('refHead').textContent = refLabel()==='Market' ? 'Mkt' : 'Low';
   $('listCount').textContent = list.length ? `(${list.length} lines)` : '';
   renderExportNote();
   $('totQty').textContent = `${tq} cards`;
@@ -929,6 +934,7 @@ $('fLine').addEventListener('change', ()=>{ fillSets(); savePrefs(); search(); }
 $('fSet').addEventListener('change', search);
 $('fFoil').addEventListener('change', ()=>{ savePrefs(); render(); });
 ['priceMode','pricePct','priceMin'].forEach(id=>$(id).addEventListener('change', savePrefs));
+$('priceMode').addEventListener('change', ()=>{ renderList(); search(); });
 $('clearBtn').addEventListener('click', ()=>{ if(list.length && confirm('Clear the whole list?')){ list=[]; save(); renderList(); } });
 $('noteClear').addEventListener('click', ()=>{ list=[]; save(); renderList(); status('List cleared. The exported file is still in the exports folder.','ok'); });
 $('noteKeep').addEventListener('click', ()=>{ try{ localStorage.removeItem('tcgib.lastExport'); }catch(e){} renderExportNote(); });
