@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TCG Import Builder</title>
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--ink:#1b1f24;--muted:#667085;--line:#e3e6ea;--accent:#2563eb;--accent-ink:#fff;--hi:#eef4ff;--warn:#b42318;--ok:#067647}
+@media (prefers-color-scheme: dark){:root{--bg:#121417;--panel:#1b1e23;--ink:#e7e9ec;--muted:#98a2b3;--line:#2c3138;--accent:#5b8cff;--accent-ink:#0b0d10;--hi:#1f2a44;--warn:#f97066;--ok:#47cd89}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{display:flex;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+header h1{font-size:16px;margin:0 12px 0 0}
+.muted{color:var(--muted)}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+input,select{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+main{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:12px;padding:12px 16px}
+@media (max-width:900px){main{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;min-width:0}
+.panel h2{font-size:14px;margin:0 0 8px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+#q{width:100%;font-size:16px;padding:8px 10px}
+.filters{display:flex;gap:8px;margin:8px 0;flex-wrap:wrap}
+.results{max-height:62vh;overflow:auto;border-top:1px solid var(--line)}
+.r{padding:7px 8px;border-bottom:1px solid var(--line);cursor:pointer}
+.r.sel{background:var(--hi)}
+.r .nm{font-weight:600}
+.r .meta{color:var(--muted);font-size:12px}
+.seticon{width:18px;height:18px;object-fit:contain;vertical-align:-4px;margin-right:6px}
+.seticon.r-u{filter:invert(55%)}
+.seticon.r-r{filter:invert(64%) sepia(60%) saturate(500%) hue-rotate(5deg)}
+.seticon.r-m{filter:invert(45%) sepia(90%) saturate(1500%) hue-rotate(350deg)}
+.setbadge{display:inline-block;font:600 10px/1 ui-monospace,Consolas,monospace;letter-spacing:.03em;padding:3px 5px;border:1px solid var(--line);border-radius:4px;color:var(--muted);margin-right:6px;vertical-align:2px}
+@media (prefers-color-scheme: dark){.seticon:not(.r-r):not(.r-m){filter:invert(1)}}
+.addrow{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.addrow .addBtn{font-size:15px;font-weight:600;padding:8px 28px}
+.addrow .qtyIn{width:58px;padding:7px 6px}
+.addrow .condSel{font-size:12px;color:var(--muted);max-width:230px}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:12px;color:var(--muted);font-weight:500}
+td input{width:70px;padding:3px 5px}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+.drop{border:2px dashed var(--line);border-radius:8px;padding:24px;text-align:center;margin:8px 0}
+.drop.over{border-color:var(--accent);background:var(--hi)}
+.status{font-size:12px}
+.status.err{color:var(--warn)}.status.ok{color:var(--ok)}
+.tot{display:flex;justify-content:space-between;margin-top:8px;font-weight:600}
+kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;font-size:11px}
+.help{font-size:12px;color:var(--muted);margin-top:6px}
+.listwrap{max-height:60vh;overflow:auto}
+.note[hidden]{display:none}
+.doneDlg{width:min(420px,90vw);text-align:center;padding:22px 24px;background:var(--panel);color:inherit;border:1px solid var(--line);border-radius:10px}
+.doneDlg::backdrop{background:rgba(0,0,0,.35)}
+.doneDlg .doneIcon{font-size:40px;line-height:1;color:#2e9d5b}
+.doneDlg.bad .doneIcon{color:#d08a1a}
+.doneDlg h3{margin:8px 0 6px;font-size:17px}.doneDlg p{margin:0 0 16px;font-size:14px;opacity:.85}
+.note{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:10px;padding:10px 12px;border:1px solid var(--accent);border-radius:8px;background:var(--hi);font-size:13px}
+#builder{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:10;padding:16px}
+#builder[hidden]{display:none}
+#builder .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;width:min(560px,100%);max-height:90vh;display:flex;flex-direction:column;gap:8px}
+#bSets{overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px;flex:1;min-height:180px;max-height:45vh}
+#bSets label{display:block;padding:2px 0}
+progress{width:100%}
+.searchbody{display:flex;gap:12px;align-items:flex-start}
+.searchbody .results{flex:1;min-width:0}
+.preview{width:250px;flex:none;position:sticky;top:0}
+.preview .imgbox{width:250px;aspect-ratio:5/7;border-radius:10px;background:var(--bg);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--muted);font-size:12px;text-align:center;padding:0}
+.preview img{width:100%;height:100%;object-fit:contain;display:block}
+.preview .cap{font-size:12px;margin-top:6px}
+.preview a{color:var(--accent)}
+@media (max-width:1200px){.preview,.preview .imgbox{width:180px}}
+@media (max-width:640px){.searchbody{flex-direction:column-reverse}.preview,.preview .imgbox{width:100%;max-width:250px}}
+td .cardlink{cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+  <h1>TCG Import Builder</h1>
+  <span class="muted" id="catInfo">No catalog loaded</span>
+  <span style="flex:1"></span>
+  <label class="muted">Default price
+    <select id="priceMode">
+      <option value="market">TCG Market Price</option>
+      <option value="low">TCG Low Price</option>
+      <option value="blank">Blank (type it)</option>
+    </select></label>
+  <label class="muted">× <input id="pricePct" type="number" value="100" min="1" max="500" style="width:60px">%</label>
+  <label class="muted" title="No exported price goes below this">floor $<input id="priceMin" type="number" value="0.50" step="0.01" min="0.01" style="width:64px"></label>
+  <button id="buildBtn" class="primary">Build catalog…</button>
+  <button id="loadBtn">Load catalog CSV…</button>
+  <input id="file" type="file" accept=".csv,text/csv" multiple hidden>
+</header>
+
+<div id="builder" hidden>
+  <div class="box">
+    <h2 style="margin:0;font-size:15px">Build catalog from TCGplayer</h2>
+    <div class="help" style="margin:0">Pulls every card and its TCGplayer IDs for the sets you pick. No Seller Portal export needed. First build of a big set takes a minute or two; after that it's cached.</div>
+    <select id="bCat"></select>
+    <input id="bFilter" placeholder="Filter sets…">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button id="bAll">Select shown</button><button id="bNone">Clear</button>
+      <label class="muted"><input type="checkbox" id="bEnglish" checked> English only</label>
+      <label class="muted" title="Normally Build skips sets you already have"><input type="checkbox" id="bRebuild"> Rebuild loaded sets</label>
+      <span class="muted" id="bCount"></span>
+    </div>
+    <div id="bSets"></div>
+    <progress id="bProg" value="0" max="1" hidden></progress>
+    <div class="status" id="bStatus"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button id="bRetry" hidden>Retry failed</button><span style="flex:1"></span><button id="bClose">Close</button><button id="bGo" class="primary">Build</button></div>
+  </div>
+</div>
+<dialog id="doneDlg" class="doneDlg"><div class="doneIcon">✓</div><h3 id="doneTitle">Build finished</h3><p id="doneMsg"></p>
+  <div style="display:flex;gap:8px;justify-content:center"><button id="doneRetry" hidden>Retry failed</button><button id="doneOk" class="primary">OK</button></div></dialog>
+
+<main>
+  <section class="panel">
+    <div id="dropZone" class="drop">
+      <b>Click “Build catalog…” to pick your sets</b>, or drop TCGplayer pricing export CSVs here<br>
+      <span class="muted">Seller Portal → Pricing → filter by game/set (turn off “My inventory only”) → Export Filtered CSV. Loaded files are remembered in this browser.</span>
+    </div>
+    <div id="fileNote" class="help" style="display:none;margin-bottom:8px;color:var(--warn)">Opened directly as a file, so TCGplayer images and set codes are limited. Start it with <b>Start TCG Importer.bat</b> instead.</div>
+    <input id="q" placeholder="Type a card: e.g.  4 bolt 2xm   |   luke sor 5   |   v johnny" autocomplete="off" spellcheck="false">
+    <div class="filters">
+      <select id="fLine"><option value="">All games</option></select>
+      <select id="fSet"><option value="">All sets</option></select>
+      <label class="muted"><input type="checkbox" id="fFoil"> Default to foil</label>
+      <span class="status" id="status"></span>
+    </div>
+    <div class="searchbody">
+      <div class="results" id="results"></div>
+      <div class="preview" id="preview" hidden>
+        <div class="imgbox" id="pvImg"></div>
+        <div class="cap"><b id="pvName"></b><div class="muted" id="pvMeta"></div><div id="pvLinks"></div></div>
+      </div>
+    </div>
+    <div class="help"><kbd>↑</kbd><kbd>↓</kbd> pick printing · <kbd>Enter</kbd> or <b>Add</b> adds Near Mint · change condition in the dropdown next to Add (resets after each add) · a leading number sets quantity (“4 bolt”) · <kbd>Esc</kbd> clear</div>
+  </section>
+
+  <section class="panel">
+    <h2><span>Cards to add <span class="muted" id="listCount"></span></span>
+      <span><button id="openListBtn" title="Load a saved list or a TCGplayer inventory export into this list">Open list CSV…</button> <button id="clearBtn">Clear</button> <button id="exportBtn" class="primary">Export CSV</button></span></h2>
+    <input id="listFile" type="file" accept=".csv,text/csv" multiple hidden>
+    <div class="listwrap">
+      <table>
+        <thead><tr><th>Card</th><th>Condition</th><th>Qty</th><th>Price</th><th class="n">Mkt</th><th></th></tr></thead>
+        <tbody id="list"></tbody>
+      </table>
+    </div>
+    <div class="tot"><span id="totQty"></span><span id="totVal"></span></div>
+    <div id="exportNote" class="note" hidden><span id="exportNoteText"></span><span style="white-space:nowrap"><button id="noteClear" class="primary">Clear list</button> <button id="noteKeep">Keep</button></span></div>
+    <div class="help">Export writes TCGplayer’s pricing-import layout: “Add to Quantity” is added to what you already have listed, and “TCG Marketplace Price” sets the listing price. Use <b>Import to Staged</b> first to check it.</div>
+  </section>
+</main>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const DEFAULT_HEADERS = ["TCGplayer Id","Product Line","Set Name","Product Name","Title","Number","Rarity","Condition","TCG Market Price","TCG Direct Low","TCG Low Price With Shipping","TCG Low Price","Total Quantity","Add to Quantity","TCG Marketplace Price","Photo URL"];
+
+// ---------- CSV ----------
+function parseCSV(text){
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows=[]; let row=[], f='', q=false;
+  for (let i=0;i<text.length;i++){
+    const c=text[i];
+    if (q){
+      if (c==='"'){ if (text[i+1]==='"'){f+='"';i++;} else q=false; }
+      else f+=c;
+    } else if (c==='"') q=true;
+    else if (c===','){ row.push(f); f=''; }
+    else if (c==='\n'){ row.push(f); rows.push(row); row=[]; f=''; }
+    else if (c!=='\r') f+=c;
+  }
+  if (f!=='' || row.length){ row.push(f); rows.push(row); }
+  return rows.filter(r => r.length>1 || (r[0]||'').trim()!=='');
+}
+const csvCell = v => { v = v==null ? '' : String(v); return /[",\r\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
+
+// ---------- normalize / search ----------
+const norm = s => (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[’']/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+const words = s => norm(s).split(' ').filter(Boolean);
+function lev1(a,b){ // edit distance <= 1
+  if (a===b) return true;
+  const la=a.length, lb=b.length; if (Math.abs(la-lb)>1) return false;
+  let i=0,j=0,e=0;
+  while(i<la&&j<lb){ if(a[i]===b[j]){i++;j++;continue;} if(++e>1) return false; if(la>lb)i++; else if(lb>la)j++; else{i++;j++;} }
+  return e+(la-i)+(lb-j)<=1;
+}
+
+// ---------- state ----------
+let headers = DEFAULT_HEADERS.slice();
+let skus = new Map();        // id -> row object
+let products = [];           // grouped
+let list = [];               // {id, qty, price}
+let results = [], sel = 0;
+let col = {};                // logical -> actual header
+let byKey = new Map();       // product key -> product
+
+function findCol(hs, ...names){
+  const n = hs.map(h=>h.toLowerCase().replace(/[^a-z]/g,''));
+  for (const name of names){ const k=name.toLowerCase().replace(/[^a-z]/g,''); const i=n.indexOf(k); if(i>=0) return hs[i]; }
+  return null;
+}
+function mapCols(hs){
+  return {
+    id: findCol(hs,'TCGplayer Id','TCGplayer ID','SKU Id','SkuId'),
+    line: findCol(hs,'Product Line','Game'),
+    set: findCol(hs,'Set Name','Set'),
+    name: findCol(hs,'Product Name','Name'),
+    num: findCol(hs,'Number','Card Number'),
+    rarity: findCol(hs,'Rarity'),
+    cond: findCol(hs,'Condition'),
+    market: findCol(hs,'TCG Market Price','Market Price'),
+    low: findCol(hs,'TCG Low Price','Low Price'),
+    addQty: findCol(hs,'Add to Quantity'),
+    price: findCol(hs,'TCG Marketplace Price'),
+  };
+}
+
+// set codes: SWU built in, MTG pulled from Scryfall's public set list (cached a week)
+const SWU_CODES = {'spark of rebellion':'sor','shadows of the galaxy':'shd','twilight of the republic':'twi','jump to lightspeed':'jtl','legends of the force':'lof','secrets of power':'sec'};
+let setCodes = new Map(Object.entries(SWU_CODES).map(([k,v])=>[k,[v]]));
+const TCGCSV = location.protocol.startsWith('http') ? '/tcgcsv' : 'https://tcgcsv.com';
+function addCode(name, code){ if(!code) return; const k=norm(name), c=norm(code).replace(/ /g,''); if(!c) return; const a=setCodes.get(k)||[]; if(!a.includes(c)) a.push(c); setCodes.set(k,a); }
+async function tcgcsvCategory(line){
+  const cats = (await getJSON(`${TCGCSV}/tcgplayer/categories`, 30)).results;
+  return pickBy(cats, line, c=>c.displayName) || pickBy(cats, line, c=>c.name) || cats.find(c=>norm(c.name).startsWith(norm(line).split(' ')[0]) && norm(line).includes(norm(c.name)));
+}
+async function loadTcgcsvCodes(){
+  const lines = [...new Set(products.map(p=>p.line))];
+  let changed=false;
+  for (const line of lines){
+    try{
+      const cat = await tcgcsvCategory(line); if (!cat) continue;
+      const groups = (await getJSON(`${TCGCSV}/tcgplayer/${cat.categoryId}/groups`, 3)).results;
+      for (const g of groups){ addCode(g.name, g.abbreviation); changed=true; }
+    }catch(e){}
+  }
+  if (changed && skus.size){ rebuild(); search(); }
+}
+// set symbols (Magic, from Scryfall); other games show the set code as a tag
+const iconByName = new Map(), iconByCode = new Map();
+function setIconFor(p){
+  if (!/magic/i.test(p.line)) return '';
+  return iconByName.get(norm(p.set)) || iconByName.get(norm(p.set.replace(/\s*\([^)]*\)\s*$/,''))) || p.codes.map(c=>iconByCode.get(c)).find(Boolean) || '';
+}
+function setMark(p){
+  const ic = setIconFor(p), code = (p.codes[0]||'').toUpperCase();
+  const rc = /mythic/i.test(p.rarity)?'r-m':/rare/i.test(p.rarity)?'r-r':/uncommon/i.test(p.rarity)?'r-u':'';
+  return (ic ? `<img class="seticon ${rc}" src="${esc(ic)}" alt="" title="${esc(p.set)}">` : '') + (code ? `<span class="setbadge" title="${esc(p.set)}">${esc(code)}</span>` : '');
+}
+async function loadSetCodes(){
+  loadTcgcsvCodes();
+  let data=null;
+  try{ const c=JSON.parse(localStorage.getItem('tcgib.mtgsets2')||'null'); if(c && Date.now()-c.t<7*864e5) data=c.d; }catch(e){}
+  if(!data){
+    try{ const r=await fetch('https://api.scryfall.com/sets',{headers:{Accept:'application/json'}}); const j=await r.json(); data=j.data.map(x=>[x.name,x.code,x.icon_svg_uri||'']); try{localStorage.setItem('tcgib.mtgsets2',JSON.stringify({t:Date.now(),d:data}));}catch(e){} }catch(e){ return; }
+  }
+  for(const [n,c,ic] of data){ addCode(n,c); if (ic){ iconByName.set(norm(n), ic); iconByCode.set(norm(c).replace(/ /g,''), ic); } }
+  if (skus.size){ rebuild(); search(); }
+}
+function setAbbrev(set){ const w=words(set); return w.map(x=>/^\d+$/.test(x)?x:x[0]).join(''); }
+
+function rebuild(){
+  col = mapCols(headers);
+  const g = new Map();
+  for (const r of skus.values()){
+    const key = [r[col.line],r[col.set],r[col.name],r[col.num]].join('|');
+    let p = g.get(key);
+    if (!p){
+      p = { key, line:r[col.line]||'', set:r[col.set]||'', name:r[col.name]||'', num:r[col.num]||'', rarity:r[col.rarity]||'', skus:[] };
+      p.nameW = words(p.name);
+      p.setW = words(p.set);
+      p.setAb = setAbbrev(p.set);
+      p.setAb2 = p.setAb.replace(/(?:19|20)(\d\d)$/,'$1');
+      p.codes = [...(setCodes.get(norm(p.set)) || setCodes.get(norm(p.set.replace(/\s*\([^)]*\)\s*$/,''))) || [])];
+      const paren = p.set.match(/\(([A-Za-z0-9]{2,6})\)\s*$/); if (paren && !p.codes.includes(paren[1].toLowerCase())) p.codes.unshift(paren[1].toLowerCase());
+      p.numN = norm(p.num).replace(/ /g,'');
+      p.numBase = p.numN.replace(/^0+/,'').split(/[^0-9]/)[0] || '';
+      g.set(key,p);
+    }
+    p.skus.push(r);
+  }
+  products = [...g.values()];
+  byKey = g;
+  for (const p of products) p.skus.sort((a,b)=>condRank(a[col.cond])-condRank(b[col.cond]) || (a[col.cond]||'').localeCompare(b[col.cond]||''));
+  const lines = [...new Set(products.map(p=>p.line))].sort();
+  fillSelect($('fLine'), 'All games', lines);
+  fillSets();
+  $('catInfo').textContent = skus.size ? `${products.length.toLocaleString()} printings · ${skus.size.toLocaleString()} SKUs · ${lines.join(', ')}` : 'No catalog loaded';
+  $('dropZone').style.display = skus.size ? 'none' : '';
+}
+function condRank(c){
+  c=(c||'').toLowerCase();
+  const base = ['near mint','lightly played','moderately played','heavily played','damaged'].findIndex(x=>c.startsWith(x));
+  const foil = /foil/.test(c) ? 1 : 0;
+  const lang = /(japanese|chinese|korean|german|french|italian|spanish|portuguese|russian)/.test(c) ? 1 : 0;
+  return lang*100 + foil*10 + (base<0?9:base);
+}
+function fillSelect(el, label, vals){
+  const cur = el.value;
+  el.innerHTML = `<option value="">${label}</option>` + vals.map(v=>`<option>${esc(v)}</option>`).join('');
+  if (vals.includes(cur)) el.value = cur;
+}
+function fillSets(){
+  const line = $('fLine').value;
+  const sets = [...new Set(products.filter(p=>!line||p.line===line).map(p=>p.set))].sort();
+  fillSelect($('fSet'), 'All sets', sets);
+}
+
+function parseQuery(raw){
+  let qty = 1, s = raw.trim();
+  const m = s.match(/^(\d{1,3})\s*x?\s+(.+)$/i);
+  if (m){ qty = +m[1]; s = m[2]; }
+  return { qty, toks: words(s) };
+}
+function scoreProduct(p, toks){
+  let score = 0, nameHits = 0;
+  for (const t of toks){
+    let best = 0;
+    for (const w of p.nameW){
+      if (w===t) best=Math.max(best,10);
+      else if (w.startsWith(t)) best=Math.max(best,7);
+      else if (t.length>=5 && lev1(w,t)) best=Math.max(best,5);
+      else if (t.length>=4 && w.includes(t)) best=Math.max(best,3);
+    }
+    if (best){ nameHits++; score+=best; continue; }
+    if (p.codes.includes(t) || p.setAb===t || p.setAb2===t) { score+=6; continue; }
+    if (p.setW.some(w=>w.startsWith(t))) { score+=4; continue; }
+    if (/^\d/.test(t) && (p.numN===t || p.numBase===t.replace(/^0+/,''))) { score+=6; continue; }
+    if (p.numN && p.numN.startsWith(t)) { score+=3; continue; }
+    if (norm(p.rarity).startsWith(t)) { score+=2; continue; }
+    return -1;
+  }
+  if (!nameHits) return -1;
+  const nameJoined = p.nameW.join(' ');
+  if (nameJoined === toks.join(' ')) score += 8;
+  score -= p.nameW.length * 0.2;
+  return score;
+}
+function search(){
+  const { toks } = parseQuery($('q').value);
+  const line = $('fLine').value, set = $('fSet').value;
+  if (!toks.length){ results=[]; render(); return; }
+  const out=[];
+  for (const p of products){
+    if (line && p.line!==line) continue;
+    if (set && p.set!==set) continue;
+    const s = scoreProduct(p,toks);
+    if (s>=0) out.push([s,p]);
+  }
+  out.sort((a,b)=>b[0]-a[0] || a[1].name.localeCompare(b[1].name) || a[1].set.localeCompare(b[1].set));
+  results = out.slice(0,60).map(x=>x[1]);
+  sel = 0; render();
+  status(out.length>60 ? `${out.length} matches, showing 60` : `${out.length} matches`);
+}
+function defaultSku(p){
+  const wantFoil = $('fFoil').checked;
+  return p.skus.find(r=>{ const c=(r[col.cond]||'').toLowerCase(); return c.startsWith('near mint') && /foil/.test(c)===wantFoil && condRank(c)<100; })
+      || p.skus.find(r=>(r[col.cond]||'').toLowerCase().startsWith('near mint'))
+      || p.skus[0];
+}
+const money = v => { const n=parseFloat(String(v||'').replace(/[$,]/g,'')); return isFinite(n)?n:null; };
+const fmt = n => n==null ? '' : '$'+n.toFixed(2);
+function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function render(){
+  const el = $('results');
+  if (!skus.size){ el.innerHTML=''; return; }
+  el.innerHTML = results.map((p,i)=>{
+    const d = defaultSku(p);
+    const mk = money(d[col.market]);
+    const chosen = (p._chosen && p.skus.find(r=>r[col.id]===p._chosen)) || d;
+    const conds = i===sel ? `<div class="addrow">
+      <input class="qtyIn" type="number" min="1" value="${parseQuery($('q').value).qty}" title="Quantity">
+      <button class="addBtn primary">Add</button>
+      <select class="condSel" title="Condition">${p.skus.map(r=>`<option value="${esc(r[col.id])}"${r===chosen?' selected':''}>${esc(r[col.cond])}${r===d?' (default)':''}</option>`).join('')}</select>
+    </div>` : '';
+    return `<div class="r ${i===sel?'sel':''}" data-i="${i}"><div class="nm">${setMark(p)}${esc(p.name)} ${mk!=null?`<span class="muted">· ${fmt(mk)}</span>`:''}</div><div class="meta">${esc(p.set)}${p.num?' · #'+esc(p.num):''}${p.rarity?' · '+esc(p.rarity):''} · ${esc(p.line)}</div>${conds}</div>`;
+  }).join('') || `<div class="r muted">No match. Try fewer words, or check the game/set filter.</div>`;
+  const s = el.querySelector('.r.sel'); if (s) s.scrollIntoView({block:'nearest'});
+  showPreview(results[sel]);
+}
+
+// ---------- image preview ----------
+// Order: Photo URL in the export > TCGplayer CDN via tcgcsv.com product ID > Scryfall (MTG) > swu-db (SWU)
+const memo = new Map();
+async function getJSON(url, days=7){
+  if (memo.has(url)) return memo.get(url);
+  const pr = (async()=>{
+    try{ const c = await kv('get','http:'+url); if (c && Date.now()-c.t < days*864e5) return c.d; }catch(e){}
+    const r = await fetch(url, {headers:{Accept:'application/json'}});
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    try{ await kv('put','http:'+url,{t:Date.now(),d}); }catch(e){}
+    return d;
+  })();
+  memo.set(url, pr); pr.catch(()=>memo.delete(url));
+  return pr;
+}
+const numKey = n => norm(String(n||'').split('/')[0]).replace(/ /g,'').replace(/^0+(?=\d)/,'');
+const pickBy = (arr, name, f) => { const n=norm(name); return arr.find(x=>norm(f(x))===n); };
+async function findTcgcsvProduct(p){
+  if (p._tp !== undefined) return p._tp;
+  const cat = await tcgcsvCategory(p.line);
+  if (!cat) return p._tp = null;
+  const groups = (await getJSON(`${TCGCSV}/tcgplayer/${cat.categoryId}/groups`, 3)).results;
+  const grp = pickBy(groups, p.set, g=>g.name);
+  if (!grp) return p._tp = null;
+  const prods = (await getJSON(`${TCGCSV}/tcgplayer/${cat.categoryId}/${grp.groupId}/products`, 3)).results;
+  const n = norm(p.name);
+  const cands = prods.filter(x=>norm(x.name)===n || norm(x.cleanName)===n);
+  const num = numKey(p.num);
+  const hit = cands.find(x=>(x.extendedData||[]).some(e=>/number/i.test(e.name) && numKey(e.value)===num)) || (cands.length===1 ? cands[0] : null) || cands[0];
+  return p._tp = hit ? { catId:cat.categoryId, groupId:grp.groupId, productId:hit.productId } : null;
+}
+
+// ---------- live price on add ----------
+// tcgcsv republishes TCGplayer prices daily (Near Mint, per finish). When a card is added, fetch the
+// set's current price list and use it, unless you've already typed your own price for that line.
+const priceLists = new Map(); // url -> {t, results}
+async function currentPrices(tp){
+  const url = `${TCGCSV}/tcgplayer/${tp.catId}/${tp.groupId}/prices`;
+  const c = priceLists.get(url);
+  if (c && Date.now()-c.t < 3600e3) return c.results;
+  const r = await fetch(url); if (!r.ok) throw new Error(r.status);
+  const results = (await r.json()).results;
+  priceLists.set(url, {t:Date.now(), results});
+  return results;
+}
+const COND_RE = /^(near mint|lightly played|moderately played|heavily played|damaged|unopened)\s*/i;
+async function refreshPrice(id){
+  const added = skus.get(id); if (!added) return;
+  // played cards: refresh the Near Mint copy, then re-price this line from it
+  const r = condStep(added[col.cond]) ? nmSibling(added) : added; if (!r) return;
+  const cond = r[col.cond]||'';
+  if (!/^(near mint|unopened)/i.test(cond)) return; // feed only has Near Mint prices
+  const p = byKey.get([r[col.line],r[col.set],r[col.name],r[col.num]].join('|')); if (!p) return;
+  try{
+    const tp = await findTcgcsvProduct(p); if (!tp) return;
+    const variant = cond.replace(COND_RE,'').replace(/\s+-\s+\w+$/,'').trim() || 'Normal';
+    const rows = (await currentPrices(tp)).filter(x=>x.productId===tp.productId);
+    const pr = rows.find(x=>x.subTypeName===variant) || (rows.length===1 ? rows[0] : null);
+    if (!pr || pr.marketPrice==null && pr.lowPrice==null) return;
+    const before = r[col.market];
+    if (col.market && pr.marketPrice!=null) r[col.market] = Number(pr.marketPrice).toFixed(2);
+    if (col.low && pr.lowPrice!=null) r[col.low] = Number(pr.lowPrice).toFixed(2);
+    const e = list.find(x=>x.id===id);
+    if (e && e.auto){ e.price = defaultPrice(added); save(); }
+    renderList(); if (results.includes(p)) render();
+    if (before !== r[col.market]) { clearTimeout(refreshPrice.t); refreshPrice.t = setTimeout(saveCatalog, 3000); }
+  }catch(err){ /* offline or relay not running: keep the catalog price */ }
+}
+
+async function viaTcgcsv(p){
+  const tp = await findTcgcsvProduct(p);
+  if (!tp) return null;
+  const hit = tp;
+  return { img:`https://tcgplayer-cdn.tcgplayer.com/product/${hit.productId}_in_1000x1000.jpg`, link:`https://www.tcgplayer.com/product/${hit.productId}`, src:'TCGplayer' };
+}
+async function viaScryfall(p){
+  const scry = c => c && ((c.image_uris && c.image_uris.normal) || (c.card_faces && c.card_faces[0].image_uris && c.card_faces[0].image_uris.normal));
+  const code = p.codes[0];
+  const cleanName = p.name.replace(/\s*\((?:[^)]*)\)\s*$/,'');
+  const tries = [];
+  if (code && p.num) tries.push(`https://api.scryfall.com/cards/${code}/${encodeURIComponent(numKey(p.num))}`);
+  if (code) tries.push(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cleanName)}&set=${code}`);
+  tries.push(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cleanName)}`);
+  for (const u of tries){
+    try{ const c = await getJSON(u, 30); const img = scry(c); if (img) return { img, link: c.purchase_uris && c.purchase_uris.tcgplayer || c.scryfall_uri, src: u.includes('set=')||u.includes('/cards/'+code+'/') ? 'Scryfall' : 'Scryfall (set not matched, may be a different printing)' }; }catch(e){}
+  }
+  return null;
+}
+async function viaSwuDb(p){
+  const code = p.codes.find(c=>/^[a-z]{3}$/.test(c)); const num = (p.num||'').split('/')[0].trim();
+  if (!code || !/^\d+$/.test(num)) return null;
+  const url = `https://cdn.swu-db.com/images/cards/${code.toUpperCase()}/${num.padStart(3,'0')}.png`;
+  const ok = await new Promise(res=>{ const i=new Image(); i.onload=()=>res(true); i.onerror=()=>res(false); i.src=url; });
+  return ok ? { img:url, src:'swu-db (check variant)' } : null;
+}
+async function findImage(p){
+  if (p._img) return p._img;
+  const photo = col && p.skus.map(r=>r['Photo URL']).find(Boolean);
+  const steps = [];
+  if (photo) steps.push(async()=>({ img:photo, src:'export' }));
+  steps.push(()=>viaTcgcsv(p));
+  if (/magic/i.test(p.line)) steps.push(()=>viaScryfall(p));
+  if (/star wars/i.test(p.line)) steps.push(()=>viaSwuDb(p));
+  p._img = (async()=>{ for (const f of steps){ try{ const r = await f(); if (r) return r; }catch(e){} } return null; })();
+  return p._img;
+}
+let pvTimer, pvCur;
+function showPreview(p){
+  const box = $('preview');
+  if (!p){ box.hidden = true; pvCur = null; return; }
+  box.hidden = false;
+  if (pvCur === p) return;
+  pvCur = p;
+  $('pvName').textContent = p.name;
+  $('pvMeta').textContent = `${p.set}${p.num?' · #'+p.num:''}`;
+  const search = `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(p.name)}`;
+  $('pvLinks').innerHTML = `<a href="${search}" target="_blank" rel="noopener">Search on TCGplayer</a>`;
+  $('pvImg').innerHTML = '<span>Loading image…</span>';
+  clearTimeout(pvTimer);
+  pvTimer = setTimeout(async()=>{
+    const r = await findImage(p);
+    if (pvCur !== p) return;
+    if (!r){ $('pvImg').innerHTML = '<span>No image found.<br>Use the TCGplayer link to check.</span>'; return; }
+    const img = new Image(); img.alt = p.name; img.referrerPolicy = 'no-referrer';
+    img.onerror = () => { if (pvCur===p) $('pvImg').innerHTML = '<span>Image failed to load.</span>'; };
+    img.src = r.img;
+    $('pvImg').replaceChildren(img);
+    $('pvLinks').innerHTML = (r.link ? `<a href="${esc(r.link)}" target="_blank" rel="noopener">Open on TCGplayer</a> · ` : `<a href="${search}" target="_blank" rel="noopener">Search on TCGplayer</a> · `) + `<span class="muted">image: ${esc(r.src)}</span>`;
+  }, 200);
+}
+
+// Condition rule: played cards are priced off the Near Mint copy of the same printing/finish,
+// minus 10% per step: LP 90%, MP 80%, HP 70%, Damaged 60%.
+const COND_STEPS = [['near mint',0],['lightly played',1],['moderately played',2],['heavily played',3],['damaged',4]];
+function condStep(c){ c=(c||'').toLowerCase(); const m=COND_STEPS.find(([k])=>c.startsWith(k)); return m?m[1]:0; }
+function nmSibling(r){
+  const step = condStep(r[col.cond]); if (!step) return null;
+  const rest = (r[col.cond]||'').replace(COND_RE,'').trim();
+  const want = norm('Near Mint' + (rest?' '+rest:''));
+  const p = byKey.get([r[col.line],r[col.set],r[col.name],r[col.num]].join('|'));
+  return p ? p.skus.find(x=>norm(x[col.cond])===want) || null : null;
+}
+function defaultPrice(r){
+  const mode = $('priceMode').value;
+  if (mode==='blank') return '';
+  const step = condStep(r[col.cond]);
+  const src = step ? nmSibling(r) : r;
+  if (!src) return '';
+  const base = money(mode==='low' ? src[col.low] : src[col.market]) ?? money(src[col.market]) ?? money(src[col.low]);
+  if (base==null) return '';
+  const pct = (+$('pricePct').value||100)/100 * (1 - 0.1*step), min = +$('priceMin').value||0.01;
+  return Math.max(min, Math.round(base*pct*100)/100).toFixed(2);
+}
+function addSku(id, qty){
+  const r = skus.get(id); if (!r) return;
+  const ex = list.find(x=>x.id===id);
+  if (ex) ex.qty += qty; else list.unshift({ id, qty, price: defaultPrice(r), auto: true });
+  save(); renderList();
+  if (location.protocol.startsWith('http')) refreshPrice(id);
+  status(`Added ${qty} × ${r[col.name]} (${r[col.cond]})`, 'ok');
+  $('q').select();
+}
+function renderList(){
+  let tq=0, tv=0;
+  $('list').innerHTML = list.map((x,i)=>{
+    const r = skus.get(x.id);
+    if (!r) return `<tr><td colspan="5" class="muted">Missing SKU ${esc(x.id)} (reload its catalog)</td><td><button data-del="${i}">✕</button></td></tr>`;
+    tq += x.qty; const p = money(x.price); if (p!=null) tv += p*x.qty;
+    const lp = byKey.get([r[col.line],r[col.set],r[col.name],r[col.num]].join('|'));
+    return `<tr><td class="cardlink" data-pv="${i}" title="Show image">${lp?setMark(lp):''}<b>${esc(r[col.name])}</b><div class="muted" style="font-size:12px">${esc(r[col.set])}${r[col.num]?' #'+esc(r[col.num]):''}</div></td>
+      <td style="font-size:12px">${esc(r[col.cond])}</td>
+      <td><input type="number" min="1" value="${x.qty}" data-qty="${i}" style="width:54px"></td>
+      <td><input type="number" min="0.01" step="0.01" value="${esc(x.price)}" data-price="${i}"></td>
+      <td class="n muted">${fmt(money(r[col.market]))}</td>
+      <td><button data-del="${i}" title="Remove">✕</button></td></tr>`;
+  }).join('');
+  $('listCount').textContent = list.length ? `(${list.length} lines)` : '';
+  renderExportNote();
+  $('totQty').textContent = `${tq} cards`;
+  $('totVal').textContent = `Listing value ${fmt(tv)}`;
+}
+function status(msg, cls=''){ const s=$('status'); s.textContent=msg; s.className='status '+cls; }
+
+// ---------- export history: warn on re-export, nudge to clear after import ----------
+const listSig = l => l.map(x=>x.id+':'+x.qty).sort().join('|');
+function loadHistory(){ try{ return JSON.parse(localStorage.getItem('tcgib.history')||'[]'); }catch(e){ return []; } }
+function saveHistory(h){ try{ localStorage.setItem('tcgib.history', JSON.stringify(h.slice(-200))); }catch(e){} }
+async function exportedBatches(){
+  // this browser's history plus every CSV in the importer's exports folder (when the server is running)
+  const out = loadHistory().map(b=>({name:b.name, t:b.t, ids:new Set(b.ids)}));
+  if (location.protocol.startsWith('http')){
+    try{
+      const r = await fetch('/exports-list'); if (r.ok){
+        for (const f of await r.json()){
+          if (out.some(b=>b.name===f.name)) continue;
+          const rows = parseCSV(f.text); if (rows.length<2) continue;
+          const hs = rows[0].map(h=>h.trim()); const c = mapCols(hs); if (!c.id) continue;
+          out.push({name:f.name, t:f.t, ids:new Set(rows.slice(1).map(r=>String(r[hs.indexOf(c.id)]||'').trim()).filter(Boolean))});
+        }
+      }
+    }catch(e){}
+  }
+  return out;
+}
+function renderExportNote(){
+  const n = $('exportNote'); let le=null;
+  try{ le = JSON.parse(localStorage.getItem('tcgib.lastExport')||'null'); }catch(e){}
+  if (le && list.length && le.sig === listSig(list)){
+    n.hidden = false;
+    $('exportNoteText').textContent = `Exported as ${le.name}. Once it's imported to TCGplayer, clear the list so these cards aren't added twice.`;
+  } else n.hidden = true;
+}
+async function exportCSV(){
+  if (!list.length){ status('List is empty','err'); return; }
+  // re-export check: same cards already sent in an earlier batch?
+  const ids = new Set(list.map(x=>x.id));
+  const sig = listSig(list);
+  let le=null; try{ le = JSON.parse(localStorage.getItem('tcgib.lastExport')||'null'); }catch(e){}
+  const batches = await exportedBatches();
+  let worst=null;
+  for (const b of batches){ let n=0; ids.forEach(id=>{ if (b.ids.has(id)) n++; }); if (n && (!worst || n>worst.n)) worst={b,n}; }
+  if (worst && (worst.n >= Math.ceil(ids.size/2) || (le && le.sig===sig))){
+    const when = worst.b.t ? new Date(worst.b.t).toLocaleString() : '';
+    if (!confirm(`${worst.n} of these ${ids.size} cards were already exported in ${worst.b.name}${when?' ('+when+')':''}.\n\nImporting them again ADDS their quantities again on TCGplayer.\n\nExport anyway?`)) { status('Export cancelled (already exported).','err'); return; }
+  }
+  // price floor applies to every line, including typed prices and loaded lists
+  const floor = Math.max(0.01, +$('priceMin').value || 0.5);
+  let raised = 0;
+  for (const x of list){ const v = money(x.price); if (v!=null && v < floor){ x.price = floor.toFixed(2); raised++; } }
+  if (raised){ save(); renderList(); }
+  const bad = list.filter(x=>!(money(x.price)>=0.01));
+  if (bad.length){ status(`${bad.length} line(s) need a price of at least $0.01`,'err'); return; }
+  const hs = headers.slice();
+  if (!col.addQty) hs.push('Add to Quantity');
+  if (!col.price) hs.push('TCG Marketplace Price');
+  const aq = col.addQty||'Add to Quantity', pr = col.price||'TCG Marketplace Price';
+  const lines = [hs.map(csvCell).join(',')];
+  for (const x of list){
+    const r = skus.get(x.id); if (!r) continue;
+    const o = { ...r, [aq]: x.qty, [pr]: money(x.price).toFixed(2) };
+    lines.push(hs.map(h=>csvCell(o[h])).join(','));
+  }
+  const blob = new Blob([lines.join('\r\n')+'\r\n'], {type:'text/csv'});
+  const a = document.createElement('a');
+  const d = new Date(); const stamp = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'_'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0');
+  a.href = URL.createObjectURL(blob); a.download = `tcgplayer-import_${stamp}.csv`;
+  const fname = `tcgplayer-import_${stamp}.csv`;
+  if (location.protocol.startsWith('http')){
+    // also save a copy in the importer's "exports" folder
+    const bytes = new TextEncoder().encode(lines.join('\r\n')+'\r\n'); let bin=''; bytes.forEach(b=>bin+=String.fromCharCode(b));
+    fetch('/save/'+fname, {method:'POST', body:btoa(bin)}).then(r=>r.ok?r.text():null).then(t=>{ if(t) status(`Exported ${list.length} lines · copy saved to ${t}`,'ok'); }).catch(()=>{});
+  }
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+  status(`Exported ${list.length} lines${raised?` · ${raised} raised to the $${floor.toFixed(2)} floor`:''}`,'ok');
+  const h = loadHistory(); h.push({name:fname, t:Date.now(), ids:[...ids]}); saveHistory(h);
+  try{ localStorage.setItem('tcgib.lastExport', JSON.stringify({name:fname, t:Date.now(), sig:listSig(list)})); }catch(e){}
+  renderExportNote();
+}
+
+// ---------- build catalog from tcgcsv + TCGplayer SKUs (needs the local server) ----------
+let bGroups=[], bBusy=false, bCancel=false;
+const PRIORITY = [1,79,92]; // Magic, Star Wars Unlimited, Cyberpunk
+async function openBuilder(){
+  $('builder').hidden=false;
+  if (!location.protocol.startsWith('http')){ $('bStatus').textContent='Start the tool with "Start TCG Importer.bat" to use this.'; $('bStatus').className='status err'; return; }
+  if ($('bCat').options.length) return;
+  try{
+    const cats=(await getJSON(`${TCGCSV}/tcgplayer/categories`,30)).results;
+    cats.sort((a,b)=>{ const pa=PRIORITY.indexOf(a.categoryId), pb=PRIORITY.indexOf(b.categoryId); return (pa<0?99:pa)-(pb<0?99:pb) || a.displayName.localeCompare(b.displayName); });
+    $('bCat').innerHTML = cats.map(c=>`<option value="${c.categoryId}">${esc(c.displayName)}</option>`).join('');
+    await loadBuilderSets();
+  }catch(e){ $('bStatus').textContent='Could not reach the card list (tcgcsv.com).'; $('bStatus').className='status err'; }
+}
+async function loadBuilderSets(){
+  $('bSets').innerHTML='<span class="muted">Loading sets…</span>';
+  let g;
+  try{ g=(await getJSON(`${TCGCSV}/tcgplayer/${$('bCat').value}/groups`,1)).results; }
+  catch(e){ $('bSets').innerHTML='<span class="status err">Could not load sets. Is the black window still open?</span>'; return; }
+  g.sort((a,b)=>String(b.publishedOn||'').localeCompare(String(a.publishedOn||'')) || a.name.localeCompare(b.name));
+  bGroups=g; renderBuilderSets();
+}
+// ticked sets are remembered per game (and survive a build or a page reload)
+const bChecked = (()=>{ try{ return new Map(Object.entries(JSON.parse(localStorage.getItem('tcgib.bsel')||'{}')).map(([k,v])=>[k,new Set(v)])); }catch(e){ return new Map(); } })();
+function bSel(){ const k=$('bCat').value; if(!bChecked.has(k)) bChecked.set(k,new Set()); return bChecked.get(k); }
+function saveBSel(){ try{ localStorage.setItem('tcgib.bsel', JSON.stringify(Object.fromEntries([...bChecked].map(([k,v])=>[k,[...v]])))); }catch(e){} }
+// products (or whole sets) that failed, kept until a later build or retry gets them
+let bFailed = (()=>{ try{ return JSON.parse(localStorage.getItem('tcgib.failed')||'[]'); }catch(e){ return []; } })();
+function saveFailed(){ try{ localStorage.setItem('tcgib.failed', JSON.stringify(bFailed)); }catch(e){} updateRetry(); }
+function updateRetry(){ const n=bFailed.length; $('bRetry').hidden=!n; $('bRetry').textContent=`Retry failed (${n})`; }
+function renderBuilderSets(){
+  const f=norm($('bFilter').value);
+  const have=new Set(products.map(p=>norm(p.set)));
+  const chk=bSel();
+  $('bSets').innerHTML = bGroups.filter(g=>!f || norm(g.name+' '+(g.abbreviation||'')).includes(f)).map(g=>
+    `<label><input type="checkbox" value="${g.groupId}"${chk.has(g.groupId)?' checked':''}> ${esc(g.name)} <span class="muted">${g.abbreviation?esc(g.abbreviation):''}${g.publishedOn?' · '+String(g.publishedOn).slice(0,4):''}${have.has(norm(g.name))?' · loaded':''}</span></label>`).join('') || '<span class="muted">No sets match.</span>';
+  updateBCount();
+}
+function updateBCount(){ const n=bSel().size; $('bCount').textContent = n?`${n} set${n>1?'s':''} selected`:''; }
+async function pool(items, n, fn){ let i=0; await Promise.all(Array.from({length:Math.min(n,items.length)}, async()=>{ while(i<items.length && !bCancel){ const k=i++; await fn(items[k],k); } })); }
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+async function fetchSkus(productId){
+  for (let attempt=0; attempt<3; attempt++){
+    try{ const r = await fetch(`/tcgsku/${productId}`); if (r.ok) return await r.json(); }catch(e){}
+    await sleep(1000*(attempt+1));
+  }
+  throw new Error('sku lookup failed');
+}
+async function getJSONRetry(url, days){
+  for (let attempt=0; attempt<3; attempt++){ try{ return await getJSON(url, days); }catch(e){ await sleep(1000*(attempt+1)); } }
+  throw new Error('list failed');
+}
+function buildCatalog(){
+  const catId=+$('bCat').value; const catName=$('bCat').selectedOptions[0].textContent;
+  let ids=[...bSel()];
+  if (!ids.length){ $('bStatus').textContent='Pick at least one set.'; return; }
+  // skip sets already in the catalog unless asked to rebuild them
+  if (!$('bRebuild').checked){
+    const have=new Set(products.map(p=>norm(p.set)));
+    const before=ids.length;
+    ids = ids.filter(gid=>{ const g=bGroups.find(x=>x.groupId===gid); return !g || !have.has(norm(g.name)); });
+    if (!ids.length){ $('bStatus').textContent=`All ${before} ticked set${before>1?'s are':' is'} already loaded. Tick "Rebuild loaded sets" to refresh them.`; $('bStatus').className='status'; return; }
+  }
+  runBuild(ids.map(gid=>{ const g=bGroups.find(x=>x.groupId===gid)||{name:String(gid)}; return {catId, catName, gid, gname:g.name, productIds:null}; }));
+}
+function retryFailed(){
+  const by=new Map();
+  for (const f of bFailed){
+    const k=f.catId+'/'+f.gid;
+    if (!by.has(k)) by.set(k,{catId:f.catId, catName:f.catName, gid:f.gid, gname:f.gname, productIds:[]});
+    const s=by.get(k); if (f.productId==null) s.productIds=null; else if (s.productIds) s.productIds.push(f.productId);
+  }
+  runBuild([...by.values()]);
+}
+// ---------- "build finished" alert: pop-up, plus sound / desktop notification / tab title when you're elsewhere ----------
+function askNotifyPermission(){ try{ if ('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(e){} }
+function chime(){
+  try{
+    const ac = new (window.AudioContext||window.webkitAudioContext)();
+    [660, 880].forEach((f,i)=>{ const o=ac.createOscillator(), g=ac.createGain(); o.frequency.value=f; o.connect(g); g.connect(ac.destination);
+      const t=ac.currentTime+i*0.18; g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.25,t+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t+0.35); o.start(t); o.stop(t+0.4); });
+  }catch(e){}
+}
+let _titleTimer=null; const _baseTitle=document.title;
+function notifyBuildDone(ok, msg){
+  const d=$('doneDlg');
+  $('doneTitle').textContent = ok ? 'Build finished' : 'Build finished, some failed';
+  $('doneMsg').textContent = msg;
+  d.querySelector('.doneIcon').textContent = ok ? '✓' : '⚠';
+  d.classList.toggle('bad', !ok);
+  $('doneRetry').hidden = ok || !bFailed.length; $('doneRetry').textContent = `Retry failed (${bFailed.length})`;
+  if (!d.open) d.showModal();
+  chime();
+  if (document.hidden){
+    try{ if ('Notification' in window && Notification.permission==='granted'){ const n=new Notification('TCG Import Builder: '+$('doneTitle').textContent, {body:msg}); n.onclick=()=>{ window.focus(); n.close(); }; } }catch(e){}
+    clearInterval(_titleTimer); let on=false;
+    _titleTimer=setInterval(()=>{ on=!on; document.title = on ? (ok?'✓ Build done':'⚠ Build done') : _baseTitle; }, 1000);
+  }
+}
+document.addEventListener('visibilitychange', ()=>{ if (!document.hidden){ clearInterval(_titleTimer); document.title=_baseTitle; } });
+
+async function runBuild(spec){
+  askNotifyPermission();
+  const english=$('bEnglish').checked;
+  bBusy=true; bCancel=false; $('bGo').disabled=true; $('bRetry').disabled=true; $('bClose').textContent='Cancel';
+  if (!skus.size) headers = DEFAULT_HEADERS.slice();
+  const pc = mapCols(headers);
+  let added=0, failed=0, done=0, total=0;
+  const prog=$('bProg'); prog.hidden=false; prog.value=0;
+  const key = (catId,gid,pid) => `${catId}/${gid}/${pid==null?'*':pid}`;
+  const failedNow = new Map(), okNow = new Set();
+  const jobs=[];
+  for (const g of spec){
+    if (bCancel) break;
+    $('bStatus').textContent=`Loading card list for ${g.gname}…`;
+    try{
+      const [prods, prices] = await Promise.all([
+        getJSONRetry(`${TCGCSV}/tcgplayer/${g.catId}/${g.gid}/products`,1).then(j=>j.results),
+        getJSONRetry(`${TCGCSV}/tcgplayer/${g.catId}/${g.gid}/prices`,1).then(j=>j.results).catch(()=>[])]);
+      okNow.add(key(g.catId,g.gid,null));
+      const line = (products.find(p=>norm(p.set)===norm(g.gname))||{}).line || g.catName;
+      const want = g.productIds ? new Set(g.productIds) : null;
+      for (const p of prods) if (!want || want.has(p.productId)) jobs.push({p, g, line, prices});
+    }catch(e){ failedNow.set(key(g.catId,g.gid,null), {catId:g.catId, catName:g.catName, gid:g.gid, gname:g.gname, productId:null}); failed++; }
+  }
+  total=jobs.length; prog.max=total||1;
+  await pool(jobs, 4, async({p,g,line,prices})=>{
+    try{
+      const d = await fetchSkus(p.productId);
+      const ext = k => ((p.extendedData||[]).find(e=>e.name===k)||{}).value || '';
+      for (const s of (d.skus||[])){
+        if (english && s.language && s.language!=='English') continue;
+        const variant = s.variant && s.variant!=='Normal' ? s.variant : '';
+        const lang = s.language && s.language!=='English' ? ' - '+s.language : '';
+        const cond = (s.condition||'') + (variant?' '+variant:'') + lang;
+        const pr = prices.find(x=>x.productId===p.productId && x.subTypeName===(s.variant||'Normal')) || prices.find(x=>x.productId===p.productId) || {};
+        const row={}; for (const h of headers) row[h]='';
+        row[pc.id]=String(s.sku); row[pc.line]=line; row[pc.set]=g.gname; row[pc.name]=p.name;
+        if (pc.num) row[pc.num]=ext('Number'); if (pc.rarity) row[pc.rarity]=ext('Rarity');
+        row[pc.cond]=cond;
+        // tcgcsv prices are Near Mint only; played conditions are priced from NM by the condition rule
+        const nm = /^(near mint|unopened)/i.test(s.condition||'');
+        if (nm && pc.market && pr.marketPrice!=null) row[pc.market]=Number(pr.marketPrice).toFixed(2);
+        if (nm && pc.low && pr.lowPrice!=null) row[pc.low]=Number(pr.lowPrice).toFixed(2);
+        skus.set(String(s.sku), row); added++;
+      }
+      okNow.add(key(g.catId,g.gid,p.productId));
+    }catch(e){ failed++; failedNow.set(key(g.catId,g.gid,p.productId), {catId:g.catId, catName:g.catName, gid:g.gid, gname:g.gname, productId:p.productId}); }
+    done++; prog.value=done;
+    if (done%10===0 || done===total) $('bStatus').textContent=`Products ${done}/${total} · ${added.toLocaleString()} SKUs${failed?` · ${failed} failed`:''}`;
+  });
+  // update the failed list: drop what worked, add what didn't
+  bFailed = bFailed.filter(f=>!okNow.has(key(f.catId,f.gid,f.productId)) && !failedNow.has(key(f.catId,f.gid,f.productId)));
+  bFailed.push(...failedNow.values());
+  saveFailed();
+  rebuild(); await saveCatalog(); loadTcgcsvCodes(); renderBuilderSets(); search();
+  $('bStatus').textContent = `${bCancel?'Cancelled. ':''}Added ${added.toLocaleString()} SKUs from ${done}/${total} products.` + (bFailed.length?` ${bFailed.length} still failed: click "Retry failed" when your connection is back.`:'');
+  $('bStatus').className = 'status '+(bFailed.length?'err':'ok');
+  bBusy=false; $('bGo').disabled=false; $('bRetry').disabled=false; $('bClose').textContent='Close';
+  if (!bCancel) notifyBuildDone(!bFailed.length, $('bStatus').textContent);
+}
+
+// ---------- loading ----------
+// Load a list back in: our own exports, or TCGplayer Live/Staged inventory exports.
+// Quantity = "Add to Quantity" if set, else "Total Quantity". Price = "TCG Marketplace Price".
+async function loadListFiles(files){
+  let added=0, lines=0, skipped=0, newSkus=0;
+  for (const f of files){
+    const rows = parseCSV(await f.text());
+    if (rows.length<2) continue;
+    const hs = rows[0].map(h=>h.trim()); const c = mapCols(hs);
+    const tq = findCol(hs,'Total Quantity');
+    if (!c.id){ status(`${f.name}: no "TCGplayer Id" column`,'err'); continue; }
+    const pc = mapCols(headers);
+    for (let i=1;i<rows.length;i++){
+      const r={}; hs.forEach((h,j)=>r[h]=rows[i][j]??'');
+      const id = String(r[c.id]).trim(); if (!id) continue;
+      const qty = parseInt(r[c.addQty])>0 ? parseInt(r[c.addQty]) : (tq && parseInt(r[tq])>0 ? parseInt(r[tq]) : 0);
+      if (!qty){ skipped++; continue; }
+      if (!skus.has(id)){
+        if (!c.name || !c.cond){ skipped++; continue; }
+        const nr={}; for (const k of Object.keys(pc)) if (pc[k] && c[k]) nr[pc[k]] = r[c[k]];
+        for (const h of headers) if (!(h in nr)) nr[h] = r[h] ?? '';
+        nr[pc.id]=id; nr[pc.addQty||'Add to Quantity']=''; nr[pc.price||'TCG Marketplace Price']='';
+        skus.set(id,nr); newSkus++;
+      }
+      const price = money(r[c.price]); 
+      const ex = list.find(x=>x.id===id);
+      if (ex) ex.qty += qty; else list.push({ id, qty, price: price!=null ? price.toFixed(2) : defaultPrice(skus.get(id)) });
+      added += qty; lines++;
+    }
+  }
+  if (newSkus){ rebuild(); await saveCatalog(); }
+  save(); renderList();
+  status(`Loaded ${lines} lines (${added} cards) into the list${skipped?`, skipped ${skipped} rows with no quantity`:''}`, lines?'ok':'err');
+}
+
+async function loadFiles(files){
+  let added=0, skipped=0;
+  for (const f of files){
+    const rows = parseCSV(await f.text());
+    if (rows.length<2){ skipped++; continue; }
+    const hs = rows[0].map(h=>h.trim());
+    const c = mapCols(hs);
+    if (!c.id || !c.name || !c.cond){ status(`${f.name}: not a TCGplayer pricing export (needs TCGplayer Id, Product Name, Condition)`,'err'); skipped++; continue; }
+    if (!skus.size) headers = hs;
+    for (let i=1;i<rows.length;i++){
+      const r={}; hs.forEach((h,j)=>r[h]=rows[i][j]??'');
+      // normalize to primary header names if they differ
+      const nr={}; const pc=mapCols(headers);
+      for (const k of Object.keys(pc)) if (pc[k] && c[k]) nr[pc[k]] = r[c[k]];
+      for (const h of headers) if (!(h in nr)) nr[h] = r[h] ?? '';
+      const id = String(nr[pc.id]).trim(); if (!id) continue;
+      nr[pc.id]=id; skus.set(id,nr); added++;
+    }
+  }
+  rebuild(); renderList(); search();
+  await saveCatalog();
+  loadTcgcsvCodes();
+  if (added) status(`Loaded ${added.toLocaleString()} SKUs${skipped?`, skipped ${skipped} file(s)`:''}`,'ok');
+}
+
+// ---------- persistence ----------
+function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open('tcg-import-builder',1); r.onupgradeneeded=()=>r.result.createObjectStore('kv'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function kv(op, key, val){ const db=await idb(); return new Promise((res,rej)=>{ const t=db.transaction('kv',op==='get'?'readonly':'readwrite'); const s=t.objectStore('kv'); const q= op==='get'?s.get(key): op==='del'?s.delete(key): s.put(val,key); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
+async function saveCatalog(){
+  try{
+    // merge in anything another tab saved meanwhile, so tabs can't wipe each other's sets
+    const stored = await kv('get','catalog'); let merged=0;
+    if (stored && stored.rows){ const sid=mapCols(stored.headers).id; for (const r of stored.rows){ const id=String(r[sid]); if (!skus.has(id)){ skus.set(id,r); merged++; } } }
+    if (merged) rebuild();
+    await kv('put','catalog',{headers, rows:[...skus.values()]});
+  }catch(e){ status('Could not save catalog in this browser; reload the CSV next time.','err'); }
+}
+function save(){ try{ localStorage.setItem('tcgib.list', JSON.stringify(list)); }catch(e){} }
+function savePrefs(){ try{ localStorage.setItem('tcgib.prefs', JSON.stringify({m:$('priceMode').value,p:$('pricePct').value,n:$('priceMin').value,f:$('fFoil').checked,l:$('fLine').value})); }catch(e){} }
+async function restore(){
+  try{ const p=JSON.parse(localStorage.getItem('tcgib.prefs')||'null'); if(p){ $('priceMode').value=p.m; $('pricePct').value=p.p; $('priceMin').value=(p.n==='0.10'?'0.50':p.n); $('fFoil').checked=p.f; $('fLine').dataset.want=p.l||''; } }catch(e){}
+  try{ list = JSON.parse(localStorage.getItem('tcgib.list')||'[]'); }catch(e){ list=[]; }
+  try{ const c = await kv('get','catalog'); if (c && c.rows){ headers=c.headers; for(const r of c.rows) skus.set(r[mapCols(headers).id], r); } }catch(e){}
+  rebuild();
+  const want=$('fLine').dataset.want; if (want && [...$('fLine').options].some(o=>o.value===want)){ $('fLine').value=want; fillSets(); }
+  renderList(); render();
+}
+
+// ---------- events ----------
+let t;
+$('q').addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(search, 90); });
+$('q').addEventListener('keydown', e=>{
+  if (e.key==='ArrowDown'){ e.preventDefault(); if(sel<results.length-1){sel++;render();} }
+  else if (e.key==='ArrowUp'){ e.preventDefault(); if(sel>0){sel--;render();} }
+  else if (e.key==='Escape'){ $('q').value=''; search(); }
+  else if (e.key==='Enter'){ e.preventDefault(); const p=results[sel]; if(p) addSku(chosenSku(p)[col.id], parseQuery($('q').value).qty); }
+  else if (e.altKey && /^[1-9]$/.test(e.key)){ e.preventDefault(); const p=results[sel]; const r=p&&p.skus[+e.key-1]; if(r) addSku(r[col.id], parseQuery($('q').value).qty); }
+});
+// condition picked in the dropdown applies to the next add only, then it's back to the default
+function chosenSku(p){ const r=(p._chosen && p.skus.find(r=>r[col.id]===p._chosen)) || defaultSku(p); p._chosen=null; return r; }
+$('results').addEventListener('click', e=>{
+  if (e.target.closest('select, input')) return;
+  if (e.target.closest('.addBtn')){
+    const p = results[sel]; if (!p) return;
+    const qi = $('results').querySelector('.r.sel .qtyIn');
+    addSku(chosenSku(p)[col.id], Math.max(1, parseInt(qi && qi.value) || 1));
+    return;
+  }
+  const r = e.target.closest('.r[data-i]'); if (r){ sel=+r.dataset.i; render(); $('q').focus(); }
+});
+$('results').addEventListener('change', e=>{
+  if (e.target.classList.contains('condSel')){ const p=results[sel]; if (p) p._chosen = e.target.value; $('q').focus(); }
+});
+$('results').addEventListener('dblclick', e=>{ const r=e.target.closest('.r[data-i]'); if(r&&!e.target.closest('button, select, input')){ const p=results[+r.dataset.i]; addSku(defaultSku(p)[col.id], parseQuery($('q').value).qty);} });
+$('list').addEventListener('change', e=>{
+  const qi=e.target.dataset.qty, pi=e.target.dataset.price;
+  if (qi!=null){ list[qi].qty=Math.max(1,parseInt(e.target.value)||1); }
+  if (pi!=null){ list[pi].price=e.target.value; list[pi].auto=false; }
+  save(); renderList();
+});
+$('list').addEventListener('click', e=>{ const c=e.target.closest('[data-pv]'); if(c){ const r=skus.get(list[+c.dataset.pv].id); if(r){ const p=byKey.get([r[col.line],r[col.set],r[col.name],r[col.num]].join('|')); if(p) showPreview(p);} } const d=e.target.closest('button[data-del]'); if(d){ list.splice(+d.dataset.del,1); save(); renderList(); } });
+$('fLine').addEventListener('change', ()=>{ fillSets(); savePrefs(); search(); });
+$('fSet').addEventListener('change', search);
+$('fFoil').addEventListener('change', ()=>{ savePrefs(); render(); });
+['priceMode','pricePct','priceMin'].forEach(id=>$(id).addEventListener('change', savePrefs));
+$('clearBtn').addEventListener('click', ()=>{ if(list.length && confirm('Clear the whole list?')){ list=[]; save(); renderList(); } });
+$('noteClear').addEventListener('click', ()=>{ list=[]; save(); renderList(); status('List cleared. The exported file is still in the exports folder.','ok'); });
+$('noteKeep').addEventListener('click', ()=>{ try{ localStorage.removeItem('tcgib.lastExport'); }catch(e){} renderExportNote(); });
+$('exportBtn').addEventListener('click', exportCSV);
+$('loadBtn').addEventListener('click', ()=>$('file').click());
+$('buildBtn').addEventListener('click', openBuilder);
+$('bCat').addEventListener('change', loadBuilderSets);
+$('bFilter').addEventListener('input', renderBuilderSets);
+$('bSets').addEventListener('change', e=>{ const v=+e.target.value; if (e.target.checked) bSel().add(v); else bSel().delete(v); saveBSel(); updateBCount(); });
+$('bAll').addEventListener('click', ()=>{ $('bSets').querySelectorAll('input').forEach(x=>{ x.checked=true; bSel().add(+x.value); }); saveBSel(); updateBCount(); });
+$('bNone').addEventListener('click', ()=>{ $('bSets').querySelectorAll('input').forEach(x=>{ x.checked=false; bSel().delete(+x.value); }); saveBSel(); updateBCount(); });
+$('bRetry').addEventListener('click', retryFailed);
+$('doneOk').addEventListener('click', ()=>$('doneDlg').close());
+$('doneRetry').addEventListener('click', ()=>{ $('doneDlg').close(); retryFailed(); });
+updateRetry();
+$('bGo').addEventListener('click', buildCatalog);
+$('bClose').addEventListener('click', ()=>{ if (bBusy) bCancel=true; else $('builder').hidden=true; });
+$('openListBtn').addEventListener('click', ()=>$('listFile').click());
+$('listFile').addEventListener('change', e=>{ loadListFiles([...e.target.files]); e.target.value=''; });
+$('file').addEventListener('change', e=>{ loadFiles([...e.target.files]); e.target.value=''; });
+['dragover','dragenter'].forEach(ev=>document.addEventListener(ev, e=>{ e.preventDefault(); $('dropZone').classList.add('over'); }));
+['dragleave','drop'].forEach(ev=>document.addEventListener(ev, e=>{ e.preventDefault(); $('dropZone').classList.remove('over'); }));
+document.addEventListener('drop', e=>{ const f=[...e.dataTransfer.files].filter(f=>/\.csv$/i.test(f.name)); if(!f.length) return; if (e.target.closest && e.target.closest('.listwrap, #list, .tot') || e.target.closest && e.target.closest('section:last-of-type')) loadListFiles(f); else loadFiles(f); });
+
+if (location.protocol==='file:') $('fileNote').style.display='';
+restore().then(()=>{ $('q').focus(); loadSetCodes(); });
+})();
+</script>
+</body>
+</html>
