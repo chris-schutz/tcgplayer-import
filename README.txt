@@ -48,7 +48,8 @@ to stop. (Opening the .html file directly also works, but without most images.)
    "Add to Quantity" is ADDED to what you already have listed.
    "TCG Marketplace Price" REPLACES the listing price for that SKU.
 
-Default price = TCG Market Price x %, never below the floor (top right, $0.50).
+Default price = TCG Low Price x % (or Market, top right), never below the floor ($0.50).
+   Search results and the list show whichever price that setting uses.
 Played cards are priced off the Near Mint copy (same finish), minus 10% per
 step: Lightly Played 90%, Moderately 80%, Heavily 70%, Damaged 60%.
 The floor also applies on Export, including prices you typed or loaded.
